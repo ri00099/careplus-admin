@@ -7,40 +7,54 @@ import { toast } from 'react-toastify'
 const Login = () => {
 
   const [state, setState] = useState('Admin')
+  const [loading, setLoading] = useState(false)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  const backendUrl = import.meta.env.VITE_BACKEND_URL
+  const configuredBackendUrl = import.meta.env.VITE_BACKEND_URL?.trim()
+  const backendUrl = configuredBackendUrl
+    ? configuredBackendUrl.replace(/\/+$/, '')
+    : import.meta.env.DEV
+      ? 'http://localhost:4000'
+      : ''
 
   const { setDToken } = useContext(DoctorContext)
   const { setAToken } = useContext(AdminContext)
 
   const onSubmitHandler = async (event) => {
     event.preventDefault();
+    if (loading) return;
 
-    if (state === 'Admin') {
-
-      const { data } = await axios.post(backendUrl + '/api/admin/login', { email, password })
-      if (data.success) {
-        setAToken(data.token)
-        localStorage.setItem('aToken', data.token)
-      } else {
-        toast.error(data.message)
-      }
-
-    } else {
-
-      const { data } = await axios.post(backendUrl + '/api/doctor/login', { email, password })
-      if (data.success) {
-        setDToken(data.token)
-        localStorage.setItem('dToken', data.token)
-      } else {
-        toast.error(data.message)
-      }
-
+    if (!backendUrl) {
+      toast.error('Backend URL is not configured')
+      return
     }
 
+    setLoading(true)
+    try {
+      const endpoint = state === 'Admin' ? '/api/admin/login' : '/api/doctor/login'
+      const { data } = await axios.post(backendUrl + endpoint, {
+        email: email.trim(),
+        password,
+      })
+
+      if (data.success) {
+        if (state === 'Admin') {
+          setAToken(data.token)
+          localStorage.setItem('aToken', data.token)
+        } else {
+          setDToken(data.token)
+          localStorage.setItem('dToken', data.token)
+        }
+      } else {
+        toast.error(data.message || 'Invalid credentials')
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Unable to reach the backend. Check the backend URL and try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -55,7 +69,9 @@ const Login = () => {
           <p>Password</p>
           <input onChange={(e) => setPassword(e.target.value)} value={password} className='border border-[#DADADA] rounded w-full p-2 mt-1' type="password" required />
         </div>
-        <button className='bg-primary text-white w-full py-2 rounded-md text-base'>Login</button>
+        <button disabled={loading} className='bg-primary text-white w-full py-2 rounded-md text-base disabled:opacity-60'>
+          {loading ? 'Logging in...' : 'Login'}
+        </button>
         {
           state === 'Admin'
             ? <p>Doctor Login? <span onClick={() => setState('Doctor')} className='text-primary underline cursor-pointer'>Click here</span></p>
